@@ -20,6 +20,7 @@ GIT_REMOTE="${GIT_REMOTE:-origin}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 COMPOSE_PROJECT="${COMPOSE_PROJECT:-}"
 APP_SERVICE="${APP_SERVICE:-new-api}"
+APP_CONTAINER="${APP_CONTAINER:-$APP_SERVICE}"
 DB_CONTAINER="${DB_CONTAINER:-postgres}"
 DB_USER="${DB_USER:-root}"
 DB_NAME="${DB_NAME:-new-api}"
@@ -43,16 +44,32 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"
 }
 
+detect_compose_project() {
+  if [[ -n "$COMPOSE_PROJECT" ]]; then
+    printf '%s' "$COMPOSE_PROJECT"
+    return
+  fi
+
+  local project
+  project="$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$APP_CONTAINER" 2>/dev/null || true)"
+  if [[ -n "$project" && "$project" != "<no value>" ]]; then
+    printf '%s' "$project"
+  fi
+}
+
 compose() {
+  local project
+  project="$(detect_compose_project)"
+
   if docker compose version >/dev/null 2>&1; then
-    if [[ -n "$COMPOSE_PROJECT" ]]; then
-      docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" "$@"
+    if [[ -n "$project" ]]; then
+      docker compose -p "$project" -f "$COMPOSE_FILE" "$@"
     else
       docker compose -f "$COMPOSE_FILE" "$@"
     fi
   elif command -v docker-compose >/dev/null 2>&1; then
-    if [[ -n "$COMPOSE_PROJECT" ]]; then
-      docker-compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" "$@"
+    if [[ -n "$project" ]]; then
+      docker-compose -p "$project" -f "$COMPOSE_FILE" "$@"
     else
       docker-compose -f "$COMPOSE_FILE" "$@"
     fi
@@ -152,6 +169,7 @@ Settings:
   COMPOSE_FILE=$COMPOSE_FILE
   COMPOSE_PROJECT=<old compose project name, optional>
   APP_SERVICE=$APP_SERVICE
+  APP_CONTAINER=$APP_CONTAINER
   DB_CONTAINER=$DB_CONTAINER
   DB_USER=$DB_USER
   DB_NAME=$DB_NAME
