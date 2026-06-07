@@ -22,6 +22,7 @@ DB_USER="${DB_USER:-root}"
 DB_NAME="${DB_NAME:-new-api}"
 IMAGE="${IMAGE:-calciumion/new-api:latest}"
 DOCKER_BUILD_PROGRESS="${DOCKER_BUILD_PROGRESS:-plain}"
+DOCKER_BUILD_NO_CACHE="${DOCKER_BUILD_NO_CACHE:-false}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/api/status}"
 BACKUP_DIR="/opt/genius-coder-data-backup"
 RUN_GIT_PULL="${RUN_GIT_PULL:-true}"
@@ -162,8 +163,14 @@ build_image() {
   need_cmd docker
   [[ -f "$COMPOSE_FILE" ]] || die "Compose file not found: $COMPOSE_FILE"
 
+  local build_args
+  build_args=(--progress="$DOCKER_BUILD_PROGRESS" -t "$IMAGE")
+  if [[ "$DOCKER_BUILD_NO_CACHE" == "true" ]]; then
+    build_args=(--no-cache "${build_args[@]}")
+  fi
+
   log "Building Docker image from current source: $IMAGE"
-  docker build --progress="$DOCKER_BUILD_PROGRESS" -t "$IMAGE" "$REPO_DIR"
+  docker build "${build_args[@]}" "$REPO_DIR"
 }
 
 start_dependencies() {
@@ -284,6 +291,7 @@ Common settings:
   DB_NAME=$DB_NAME
   IMAGE=$IMAGE
   DOCKER_BUILD_PROGRESS=$DOCKER_BUILD_PROGRESS
+  DOCKER_BUILD_NO_CACHE=true|false
   HEALTH_URL=$HEALTH_URL
   RUN_DB_BACKUP=true|false
   RUN_GIT_PULL=true|false
