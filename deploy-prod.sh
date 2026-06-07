@@ -44,15 +44,18 @@ need_cmd() {
 }
 
 compose() {
-  local project_args=()
-  if [[ -n "$COMPOSE_PROJECT" ]]; then
-    project_args=(-p "$COMPOSE_PROJECT")
-  fi
-
   if docker compose version >/dev/null 2>&1; then
-    docker compose "${project_args[@]}" -f "$COMPOSE_FILE" "$@"
+    if [[ -n "$COMPOSE_PROJECT" ]]; then
+      docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" "$@"
+    else
+      docker compose -f "$COMPOSE_FILE" "$@"
+    fi
   elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose "${project_args[@]}" -f "$COMPOSE_FILE" "$@"
+    if [[ -n "$COMPOSE_PROJECT" ]]; then
+      docker-compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" "$@"
+    else
+      docker-compose -f "$COMPOSE_FILE" "$@"
+    fi
   else
     die "Missing command: docker compose or docker-compose"
   fi
