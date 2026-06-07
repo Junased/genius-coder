@@ -21,6 +21,7 @@ AUTO_DETECT_COMPOSE_PROJECT="${AUTO_DETECT_COMPOSE_PROJECT:-true}"
 DB_USER="${DB_USER:-root}"
 DB_NAME="${DB_NAME:-new-api}"
 IMAGE="${IMAGE:-calciumion/new-api:latest}"
+DOCKER_BUILD_PROGRESS="${DOCKER_BUILD_PROGRESS:-plain}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/api/status}"
 BACKUP_DIR="/opt/genius-coder-data-backup"
 RUN_GIT_PULL="${RUN_GIT_PULL:-true}"
@@ -162,7 +163,7 @@ build_image() {
   [[ -f "$COMPOSE_FILE" ]] || die "Compose file not found: $COMPOSE_FILE"
 
   log "Building Docker image from current source: $IMAGE"
-  docker build -t "$IMAGE" "$REPO_DIR"
+  docker build --progress="$DOCKER_BUILD_PROGRESS" -t "$IMAGE" "$REPO_DIR"
 }
 
 start_dependencies() {
@@ -282,6 +283,7 @@ Common settings:
   DB_USER=$DB_USER
   DB_NAME=$DB_NAME
   IMAGE=$IMAGE
+  DOCKER_BUILD_PROGRESS=$DOCKER_BUILD_PROGRESS
   HEALTH_URL=$HEALTH_URL
   RUN_DB_BACKUP=true|false
   RUN_GIT_PULL=true|false
