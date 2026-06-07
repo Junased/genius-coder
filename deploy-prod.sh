@@ -24,6 +24,8 @@ APP_CONTAINER="${APP_CONTAINER:-$APP_SERVICE}"
 DB_CONTAINER="${DB_CONTAINER:-postgres}"
 DB_USER="${DB_USER:-root}"
 DB_NAME="${DB_NAME:-new-api}"
+IMAGE="${IMAGE:-calciumion/new-api:latest}"
+DOCKER_BUILD_PROGRESS="${DOCKER_BUILD_PROGRESS:-plain}"
 BACKUP_DIR="${BACKUP_DIR:-/opt/genius-coder-data-backup}"
 HEALTH_URL="${HEALTH_URL:-https://www.geniuscoder.cn/api/status}"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-60}"
@@ -116,10 +118,11 @@ pull_latest_code() {
 }
 
 build_app() {
+  need_cmd docker
   [[ -f "$COMPOSE_FILE" ]] || die "Compose file not found: $COMPOSE_FILE"
 
-  log "Building service with no cache: $APP_SERVICE"
-  compose build --no-cache "$APP_SERVICE"
+  log "Building Docker image with no cache: $IMAGE"
+  docker build --no-cache --progress="$DOCKER_BUILD_PROGRESS" -t "$IMAGE" "$REPO_DIR"
 }
 
 restart_app() {
@@ -173,6 +176,8 @@ Settings:
   DB_CONTAINER=$DB_CONTAINER
   DB_USER=$DB_USER
   DB_NAME=$DB_NAME
+  IMAGE=$IMAGE
+  DOCKER_BUILD_PROGRESS=$DOCKER_BUILD_PROGRESS
   BACKUP_DIR=$BACKUP_DIR
   HEALTH_URL=$HEALTH_URL
   HEALTH_TIMEOUT_SECONDS=$HEALTH_TIMEOUT_SECONDS
