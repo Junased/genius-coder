@@ -13,6 +13,11 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 APP_SERVICE="${APP_SERVICE:-new-api}"
 DB_SERVICE="${DB_SERVICE:-postgres}"
 REDIS_SERVICE="${REDIS_SERVICE:-redis}"
+APP_CONTAINER="${APP_CONTAINER:-$APP_SERVICE}"
+DB_CONTAINER="${DB_CONTAINER:-$DB_SERVICE}"
+REDIS_CONTAINER="${REDIS_CONTAINER:-$REDIS_SERVICE}"
+COMPOSE_PROJECT="${COMPOSE_PROJECT:-}"
+AUTO_DETECT_COMPOSE_PROJECT="${AUTO_DETECT_COMPOSE_PROJECT:-true}"
 DB_USER="${DB_USER:-root}"
 DB_NAME="${DB_NAME:-new-api}"
 IMAGE="${IMAGE:-calciumion/new-api:latest}"
@@ -42,11 +47,46 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Missing command: $1"
 }
 
+running_container_id() {
+  docker ps --filter "name=^/$1$" --filter "status=running" -q | head -n 1
+}
+
+container_compose_project() {
+  docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$1" 2>/dev/null || true
+}
+
+detect_compose_project() {
+  if [[ -n "$COMPOSE_PROJECT" ]]; then
+    printf '%s' "$COMPOSE_PROJECT"
+    return
+  fi
+
+  if [[ "$AUTO_DETECT_COMPOSE_PROJECT" != "true" ]]; then
+    return
+  fi
+
+  local container project
+  for container in "$APP_CONTAINER" "$DB_CONTAINER" "$REDIS_CONTAINER"; do
+    project="$(container_compose_project "$container")"
+    if [[ -n "$project" && "$project" != "<no value>" ]]; then
+      printf '%s' "$project"
+      return
+    fi
+  done
+}
+
 compose() {
+  local project
+  local project_args=()
+  project="$(detect_compose_project)"
+  if [[ -n "$project" ]]; then
+    project_args=(-p "$project")
+  fi
+
   if docker compose version >/dev/null 2>&1; then
-    docker compose -f "$COMPOSE_FILE" "$@"
+    docker compose "${project_args[@]}" -f "$COMPOSE_FILE" "$@"
   elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose -f "$COMPOSE_FILE" "$@"
+    docker-compose "${project_args[@]}" -f "$COMPOSE_FILE" "$@"
   else
     die "Missing command: docker compose or docker-compose"
   fi
@@ -93,20 +133,27 @@ backup_database() {
     return
   fi
 
+  need_cmd docker
   need_cmd gzip
   mkdir -p "$BACKUP_DIR"
 
   local container_id
   container_id="$(compose ps -q "$DB_SERVICE" 2>/dev/null || true)"
-  if [[ -z "$container_id" ]]; then
-    die "Database service '$DB_SERVICE' is not running. Start it first or run with RUN_DB_BACKUP=false for first deploy."
-  fi
 
   local backup_file
   backup_file="$BACKUP_DIR/${DB_NAME}-$(date +%Y%m%d-%H%M%S).sql.gz"
 
   log "Backing up PostgreSQL database to $backup_file"
-  compose exec -T "$DB_SERVICE" pg_dump -U "$DB_USER" "$DB_NAME" | gzip >"$backup_file"
+  if [[ -n "$container_id" ]]; then
+    compose exec -T "$DB_SERVICE" pg_dump -U "$DB_USER" "$DB_NAME" | gzip >"$backup_file"
+  else
+    container_id="$(running_container_id "$DB_CONTAINER" || true)"
+    if [[ -z "$container_id" ]]; then
+      die "Database service '$DB_SERVICE' or container '$DB_CONTAINER' is not running. Start it first or run with RUN_DB_BACKUP=false for first deploy."
+    fi
+    warn "Compose cannot see service '$DB_SERVICE'; backing up running container '$DB_CONTAINER' directly."
+    docker exec -i "$DB_CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" | gzip >"$backup_file"
+  fi
   log "Database backup complete"
 }
 
@@ -125,11 +172,33 @@ start_dependencies() {
   fi
 
   log "Starting dependencies: $DB_SERVICE $REDIS_SERVICE"
-  compose up -d "$DB_SERVICE" "$REDIS_SERVICE"
+  start_dependency "$DB_SERVICE" "$DB_CONTAINER"
+  start_dependency "$REDIS_SERVICE" "$REDIS_CONTAINER"
+}
+
+start_dependency() {
+  local service="$1"
+  local container="$2"
+
+  if [[ -n "$(compose ps -q "$service" 2>/dev/null || true)" ]]; then
+    compose up -d "$service"
+    return
+  fi
+
+  if [[ -n "$(running_container_id "$container" || true)" ]]; then
+    log "Dependency container already running: $container"
+    return
+  fi
+
+  compose up -d "$service"
 }
 
 restart_app() {
   log "Recreating application service: $APP_SERVICE"
+  if [[ -z "$(compose ps -q "$APP_SERVICE" 2>/dev/null || true)" ]] &&
+    docker ps -a --filter "name=^/$APP_CONTAINER$" -q | grep -q .; then
+    die "Application container '$APP_CONTAINER' exists but is not managed by this compose project. Set COMPOSE_PROJECT to the old compose project name, or stop/remove only this app container manually before deploying."
+  fi
   compose up -d --force-recreate "$APP_SERVICE"
 }
 
@@ -206,6 +275,10 @@ Common settings:
   APP_SERVICE=$APP_SERVICE
   DB_SERVICE=$DB_SERVICE
   REDIS_SERVICE=$REDIS_SERVICE
+  APP_CONTAINER=$APP_CONTAINER
+  DB_CONTAINER=$DB_CONTAINER
+  REDIS_CONTAINER=$REDIS_CONTAINER
+  COMPOSE_PROJECT=<optional old compose project name>
   DB_USER=$DB_USER
   DB_NAME=$DB_NAME
   IMAGE=$IMAGE
