@@ -18,10 +18,35 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useState } from 'react';
-import { Button, Space } from '@douyinfe/semi-ui';
-import { showError } from '../../../helpers';
+import { Button } from '@douyinfe/semi-ui';
+import { IconCopy } from '@douyinfe/semi-icons';
+import {
+  copy,
+  getServerAddress,
+  showError,
+  showSuccess,
+} from '../../../helpers';
 import CopyTokensModal from './modals/CopyTokensModal';
 import DeleteTokensModal from './modals/DeleteTokensModal';
+
+const appendV1Path = (url) => `${url.replace(/\/+$/, '')}/v1`;
+
+const BaseUrlCopyItem = ({ value, copyLabel, onCopy }) => (
+  <span className='token-base-url-item'>
+    <span className='token-base-url-value' title={value}>
+      {value}
+    </span>
+    <Button
+      theme='borderless'
+      type='tertiary'
+      size='small'
+      className='token-base-url-copy'
+      icon={<IconCopy />}
+      aria-label={copyLabel}
+      onClick={() => onCopy(value)}
+    />
+  </span>
+);
 
 const TokensActions = ({
   selectedKeys,
@@ -51,6 +76,17 @@ const TokensActions = ({
       return;
     }
     setShowDeleteModal(true);
+  };
+
+  const baseUrl = getServerAddress();
+  const baseUrlWithV1 = appendV1Path(baseUrl);
+
+  const handleCopyBaseUrl = async (url) => {
+    if (await copy(url)) {
+      showSuccess(t('已复制到剪贴板！'));
+    } else {
+      showError(t('复制失败，请手动复制'));
+    }
   };
 
   // Handle delete confirmation
@@ -93,6 +129,21 @@ const TokensActions = ({
         >
           {t('删除所选令牌')}
         </Button>
+
+        <div className='token-base-url'>
+          <span className='token-base-url-label'>BaseUrl:</span>
+          <BaseUrlCopyItem
+            value={baseUrl}
+            copyLabel={`${t('复制')} BaseUrl`}
+            onCopy={handleCopyBaseUrl}
+          />
+          <span className='token-base-url-separator'>/</span>
+          <BaseUrlCopyItem
+            value={baseUrlWithV1}
+            copyLabel={`${t('复制')} BaseUrl /v1`}
+            onCopy={handleCopyBaseUrl}
+          />
+        </div>
       </div>
 
       <CopyTokensModal
