@@ -18,6 +18,7 @@ REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 BRANCH="${BRANCH:-main}"
 GIT_REMOTE="${GIT_REMOTE:-origin}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
+COMPOSE_PROJECT="${COMPOSE_PROJECT:-}"
 APP_SERVICE="${APP_SERVICE:-new-api}"
 DB_CONTAINER="${DB_CONTAINER:-postgres}"
 DB_USER="${DB_USER:-root}"
@@ -43,10 +44,15 @@ need_cmd() {
 }
 
 compose() {
+  local project_args=()
+  if [[ -n "$COMPOSE_PROJECT" ]]; then
+    project_args=(-p "$COMPOSE_PROJECT")
+  fi
+
   if docker compose version >/dev/null 2>&1; then
-    docker compose -f "$COMPOSE_FILE" "$@"
+    docker compose "${project_args[@]}" -f "$COMPOSE_FILE" "$@"
   elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose -f "$COMPOSE_FILE" "$@"
+    docker-compose "${project_args[@]}" -f "$COMPOSE_FILE" "$@"
   else
     die "Missing command: docker compose or docker-compose"
   fi
@@ -98,7 +104,7 @@ build_app() {
 
 restart_app() {
   log "Recreating service: $APP_SERVICE"
-  compose up -d --force-recreate "$APP_SERVICE"
+  compose up -d --force-recreate --no-deps "$APP_SERVICE"
 }
 
 wait_for_health() {
@@ -141,6 +147,7 @@ Settings:
   BRANCH=$BRANCH
   GIT_REMOTE=$GIT_REMOTE
   COMPOSE_FILE=$COMPOSE_FILE
+  COMPOSE_PROJECT=<old compose project name, optional>
   APP_SERVICE=$APP_SERVICE
   DB_CONTAINER=$DB_CONTAINER
   DB_USER=$DB_USER
